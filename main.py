@@ -8,7 +8,7 @@ trig2, echo2 = Pin(26, Pin.OUT), Pin(33, Pin.IN)
 
 THRESHOLD = 3      # cm away from normal before I call the lane blocked
 CONFIRM   = 2      # need this many blocked readings in a row, stops random glitches
-LOCKOUT   = 400    # ms of ignoring after a trigger, so one runner is not counted twice
+LOCKOUT   = 400    # ms of ignoring after a trigger, so one runner is not counted twice. This is useless in this version of the code, but could help later avoid such issues.
 
 
 def read_cm(trig, echo):
