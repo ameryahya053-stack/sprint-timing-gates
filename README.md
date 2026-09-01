@@ -2,7 +2,7 @@
 Automatic sprint timing gates - ESP32 and ultrasonic sensors, built for $30
 
 ---------------
-**#Why build sprint timing gates?**
+**Why build sprint timing gates?**
 
 In football, speed is critical, especially on the wider positions (RW,LW, RB,LB). Ever since I was 13 years old, every coach I would play for would assign me a central position for the following reasons:
 - My ball control was superb for my age.
@@ -14,6 +14,6 @@ Despite all these indications that the midfield was my strongest position, I was
 
 The day after our discussion, I got to work immediately. I needed someone to time me with a stopwatch while I sprint. The only person who I had consistent access to was my little brother. I went to the park with him, estimated a distance of 10 meters and marked it with yellow tape. I sprinted many times, and the timings I got were in the range of on average +- 0.3 seconds, which is a large margin of error for a 10 meter sprint. Human reaction time is around 0.2 seconds, which is unavoidable no matter who holds the stopwatch. A 20% cut on a roughly 2 second sprint is about 0.4 seconds. My measurement error was +-0.3 seconds. The stopwatch could not tell me whether I had succeeded. 
 
-**##What I had to work with**
+**What I had to work with**
 
 Commercial timing gates cost around $200. I already had a starter kit with two ultrasonic sensors, an ESP32, resistors and jumper wires. I did not have IR emitters or receivers. Break-beam gates using IR would have been more accurate, but buying the parts and waiting for them to ship would have cost me weeks. Working with what I had, the total cost was about $30 against roughly $200 for a commercial system.
