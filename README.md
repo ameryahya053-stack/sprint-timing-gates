@@ -17,3 +17,32 @@ The day after our discussion, I got to work immediately. I needed someone to tim
 **What I had to work with**
 
 Commercial timing gates cost around $200. I already had a starter kit with two ultrasonic sensors, an ESP32, resistors and jumper wires. I did not have IR emitters or receivers. Break-beam gates using IR would have been more accurate, but buying the parts and waiting for them to ship would have cost me weeks. Working with what I had, the total cost was about $30 against roughly $200 for a commercial system.
+
+---------------
+**Hardware**
+| Part | # | Notes |
+|---|---|---|
+| ESP32  | 1 | Freenove ESP32-WROOM, headers pre-soldered |
+| HC-SR04 ultrasonic sensor | 3 | 2 gates + 1 profiler |
+| 1 k ohm resistor | 9 | three per voltage divider |
+| Breadboard | 1 | from starter kit |
+| Jumper wires | around 20 | from starter kit |
+| Ethernet cable, 50 ft | 1 | cut into runs to each gate |
+| Cardboard reflector panel | 2 | one per gate |
+| Posts or cones | 4 | two per gate |
+
+- Flat cardboard works better than a cone as a reflector. A curved surface scatters the burst, so the echo is weaker and dropouts are more frequent. 
+- The profiler has no panel. It points down the lane at the runner's back, so the runner is the reflector.
+Wiring(V1 - without profiler):
+
+| Sensor | Trig | Echo (via divider) |
+|---|---|---|
+| Start gate | GPIO 25 | GPIO 32 |
+| Finish gate | GPIO 26 | GPIO 33 |
+
+
+![IMG_0893](https://github.com/user-attachments/assets/5257f855-8485-4c8a-8673-a5fc6f44eb65)
+
+
+
+
