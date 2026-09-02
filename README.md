@@ -92,27 +92,47 @@ mixed in.
 
 ### Results
 
-| | Value |
-|---|---|
-| Loop rate | 124 Hz |
-| Mean difference | -2.30 ms |
-| Standard deviation | 9.35 ms |
-| Range | -27 to +23 ms |
-| Dropout rate | 2.2% |
+I ran the test twice. Both runs used the same setup, panel about 30 cm
+away.
 
-NOTE
-This 9.35 ms was measured with the panel about 30 cm away. On the field the gap will be about 1.2 m, so the sound has to travel four times further and each reading takes longer. That slows the loop down, and since the loop speed is what sets the timing error, the error will get bigger. I would guess somewhere around 15 to 20 ms instead of 9. That is still far better than a stopwatch, so it does not change anything about the project.
+| | Run 1 | Run 2 |
+|---|---|---|
+| Loop rate | 124 Hz | 125 Hz |
+| Mean difference | -2.30 ms | -0.05 ms |
+| Standard deviation | 9.35 ms | 5.70 ms |
+| Range | -27 to +23 ms | -27 to +3 ms |
+| Dropout rate | 2.2% | 2.4% |
+
+In run 2, 29 of the 30 trials landed within +-3 ms. The standard
+deviation of 5.70 ms is almost entirely caused by one outlier at
+-26.65 ms. The mean of -0.05 ms means the two gates have no built in
+bias, neither one is consistently faster.
+
+The outliers are all about the same size because they happen when one
+gate catches the cardboard a full loop pass later than the other. The
+loop reads gate A, then gate B, then repeats, so if the cardboard
+arrives right between two reads, one gate sees it now and the other
+sees it on the next pass.
+
+**Note on field conditions:** these numbers were measured with the
+panel about 30 cm away. On the field the gap will be about 1.2 m, so
+the sound has to travel four times further and each reading takes
+longer. That slows the loop down, and since the loop speed is what
+sets the timing error, the error will get bigger. I would guess
+somewhere around 15 to 20 ms. That is still far better than a
+stopwatch, so it does not change anything about the project, but I
+will run the same test on the field to get the real number.
 
 ### Compared to a stopwatch
 
 | Method | Error |
 |---|---|
 | Stopwatch | +-300 ms |
-| This device | +-9 ms |
-| Improvement | about 32x |
+| This device | about +-6 ms |
+| Improvement | about 50x |
 
-My target was a 0.4 s improvement. At +-9 ms that is easy to detect.
-With a stopwatch it was not.
+My target was a 0.4 s improvement. At this precision that is easy to
+detect. With a stopwatch it was not.
 
 ---
 
