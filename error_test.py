@@ -96,7 +96,7 @@ if g1.calibrate() and g2.calibrate():
         read_cm(trig2, echo2)
     elapsed = time.ticks_diff(time.ticks_ms(), t0)
     rate = 50 / (elapsed / 1000)
-    print("sample rate: {:.1f} Hz per sensor".format(rate))
+    print("loop rate: {:.1f} Hz".format(rate))
 
  
     print("wave cardboard through", TRIALS, "times\n")
