@@ -24,7 +24,8 @@ Commercial timing gates cost around $200. I already had a starter kit with two u
 |---|---|---|
 | ESP32  | 1 | Freenove ESP32-WROOM, headers pre-soldered |
 | HC-SR04 ultrasonic sensor | 3 | 2 gates + 1 profiler |
-| 1 k ohm resistor | 9 | three per voltage divider |
+| 1 k ohm resistor | 3 | one per voltage divider |
+| 2 k ohm resistor | 3 | one per voltage divider |
 | Breadboard | 1 | from starter kit |
 | Jumper wires | around 20 | from starter kit |
 | Ethernet cable, 50 ft | 1 | cut into runs to each gate |
@@ -33,6 +34,8 @@ Commercial timing gates cost around $200. I already had a starter kit with two u
 
 - Flat cardboard works better than a cone as a reflector. A curved surface scatters the burst, so the echo is weaker and dropouts are more frequent. 
 - The profiler has no panel. It points down the lane at the runner's back, so the runner is the reflector.
+
+
 Wiring(V1 - without profiler):
 
 | Sensor | Trig | Echo (via divider) |
@@ -41,7 +44,98 @@ Wiring(V1 - without profiler):
 | Finish gate | GPIO 26 | GPIO 33 |
 
 
-![IMG_0893](https://github.com/user-attachments/assets/5257f855-8485-4c8a-8673-a5fc6f44eb65)
+<img width="771" height="574" alt="Screenshot 2026-09-02 at 2 17 23 PM" src="https://github.com/user-attachments/assets/f021c1fc-26c1-46c9-b8a4-562b98ce1249" />
+
+
+**Circuit Diagram**
+
+Vcc pin on the ultrasonic sensor was fairly easy, only needing to attach 5v of power into it.
+<img width="438" height="516" alt="Screenshot 2026-09-02 at 2 14 24 PM" src="https://github.com/user-attachments/assets/1978ffe5-afd7-4a3b-97ea-23d8b8e01d8f" />
+
+This is the way I attached every sensor. The sensor runs on 5 V, so its Echo pin sends back 5v. The ESP32 pins can only take 3.3V. Sending 5V into a pin damages it slowly, so the two resistors split the voltage and the ESP32 reads the point between them at 3.33V.
+
+## How it works
+
+### Detection
+Each sensor pings across the lane at a cardboard panel. With the lane
+empty the reading is steady, that is the baseline. When a runner
+passes, the echo comes back short off their body, or does not come
+back at all. Both count as blocked.
+
+### Calibration
+60 readings at startup, failed readings thrown away, median taken as
+the baseline. Median not average, so one stray reading cannot drag it
+off. 
+
+### The three parameters
+
+| Parameter | Value | What it does |
+|---|---|---|
+| THRESHOLD | 7 cm | how far off baseline counts as blocked (This number will also change when I get on the field) |
+| CONFIRM | 2 | blocked readings in a row before triggering timer |
+| LOCKOUT | 400 ms | gate ignores everything after firing |
+
+### Timing
+Both timestamps come from the same ESP32 clock, so there is no
+syncing problem. Two wireless boards would each have their own
+crystal and would need an NTP (Network Time Protocol) style exchange to agree.
+
+---
+
+## Measured performance
+
+### How I measured it
+Both sensors side by side, aimed at the same panel. Waved a piece of cardboard
+through 30 times. In theory both should fire at the same instant, so
+any difference is the device's own error with no running variation
+mixed in.
+
+### Results
+
+| | Value |
+|---|---|
+| Loop rate | 124 Hz |
+| Mean difference | -2.30 ms |
+| Standard deviation | 9.35 ms |
+| Range | -27 to +23 ms |
+| Dropout rate | 2.2% |
+
+NOTE
+This 9.35 ms was measured with the panel about 30 cm away. On the field the gap will be about 1.2 m, so the sound has to travel four times further and each reading takes longer. That slows the loop down, and since the loop speed is what sets the timing error, the error will get bigger. I would guess somewhere around 15 to 20 ms instead of 9. That is still far better than a stopwatch, so it does not change anything about the project.
+
+### Compared to a stopwatch
+
+| Method | Error |
+|---|---|
+| Stopwatch | +-300 ms |
+| This device | +-9 ms |
+| Improvement | about 32x |
+
+My target was a 0.4 s improvement. At +-9 ms that is easy to detect.
+With a stopwatch it was not.
+
+---
+
+## Problems I hit
+
+### Panel distance changed everything
+At 12 cm the baseline was noisy and 33% of readings came back with no
+echo. Since a missing echo counts as blocked, gates were firing on
+nothing. Moving the panel to 30 cm dropped the dropout rate to 2.2%
+and the false triggers stopped.
+
+### THRESHOLD is not a fixed number
+3 cm caused false triggers on a noisy baseline. This triggered the count variable to be raised for the first trial, making the timer for one of the gates (A or B) start before I even wave the cardboard.
+Raised it to 7 cm and it worked. The right value depends on how much the baseline wobbles,
+which depends on the setup.
+
+
+
+---
+
+## Version 2: adding the profiler + Ethernet wiring for outdoor testing
+
+
 
 
 
