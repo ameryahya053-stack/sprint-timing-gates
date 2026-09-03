@@ -20,6 +20,7 @@ Commercial timing gates cost around $200. I already had a starter kit with two u
 
 ---------------
 **Hardware**
+Everything below was built and tested indoors on a desk, with the sensors about 30 cm from the cardboard instead of the 1.2 m they will be on a lane. All the parameters and results are for that setup. The numbers will change on the field, and the code learns the baseline at startup so it adapts on its own, but the threshold and the timing accuracy will both need retesting outdoors.
 | Part | # | Notes |
 |---|---|---|
 | ESP32  | 1 | Freenove ESP32-WROOM, headers pre-soldered |
@@ -34,6 +35,7 @@ Commercial timing gates cost around $200. I already had a starter kit with two u
 
 - Flat cardboard works better than a cone as a reflector. A curved surface scatters the burst, so the echo is weaker and dropouts are more frequent. 
 - The profiler has no panel. It points down the lane at the runner's back, so the runner is the reflector.
+
 
 
 Wiring(V1 - without profiler):
@@ -153,10 +155,162 @@ which depends on the setup.
 
 ---
 
-## Version 2: adding the profiler + Ethernet wiring for outdoor testing
+## Version 2: adding the profiler
+
+Why a total time is not enough:
+ 
+The two gates give me one number: how long the 10 metres took. That is useful, but it does not tell me anything about how I ran it. Two players can have the exact same 10 metre time and get there in completely different ways. One explodes off the line and then slows down. The other starts slowly and keeps building the whole way.
+ 
+My coach cares about the first few steps, because that is what matters for a winger. A total time hides exactly the part I need to see. So I added a third sensor to measure where I am during the run, not just when I cross the two lines.
+ 
+How the profiler works:
+ 
+The third sensor sits behind the start line, pointing down the lane at my back. I run away from it, so it is never in my path. While the timer is running, the sensor keeps measuring how far away I am. That gives me a list of positions with a timestamp on each one. From that list I can work out how fast I was moving at any point during the run, which the gates cannot do.
+ 
+| | Gates | Profiler |
+|---|---|---|
+| What it gives | one time for the whole run | position all the way through |
+| How reliable | very | noisier |
+| Range needed | 1.2 m across the lane | up to 4 m down the lane |
+ 
+Wiring (V2):
+ 
+| Sensor | Trig | Echo (via divider) |
+|---|---|---|
+| Start gate | GPIO 25 | GPIO 32 |
+| Finish gate | GPIO 26 | GPIO 33 |
+| Profiler | GPIO 27 | GPIO 35 |
+
+**V2 Image**
+<img width="612" height="399" alt="Screenshot 2026-09-03 at 1 22 48 PM" src="https://github.com/user-attachments/assets/346de15f-6617-41b2-961d-42a95ad52425" />
+ 
+GPIO 35 is input only on the ESP32. That is fine for Echo because I only ever read it, and it saves an output pin for something else later.
+ 
+The profiler needs the same voltage divider as the gates. It does not need a cardboard panel though, because I am the reflector. PROFILER_OFFSET is how far the sensor sits behind the start line. The code subtracts it from every reading, so the numbers come out as distance from the start line instead of distance from the sensor.
+ 
+How far the profiler can see:
+ 
+I tested this before writing any code, by walking away from the sensor and watching where the readings stopped coming back. It reads reliably out to about 4 metres. After that the echo is too weak and I get nothing back at all.
+ 
+That is not enough to cover a full 10 metre sprint, but it does cover the acceleration phase, which is the part I actually care about. So the design ended up being: profiler for the first few metres in detail, gates for the total time across all 10.
+ 
+---------------
+**Signal processing**
+ 
+This is where the real work in V2 was, and it is not the part I expected to be hard.
+ 
+Step 1 - fixing the sampling pattern:
+ 
+The first thing I noticed when I plotted the raw position data was a sawtooth in it. It went up, down, up, down, every other point. That was not the sensor being bad. When I looked at the timestamps I saw they came in pairs about 7 ms apart, then a 23 ms gap, then another pair. So the profiler was being read twice in some loop passes and once in others, depending on what the finish gate was doing at the time.
+ 
+Because the two types of reading happened under slightly different conditions, they gave slightly different distances, and that showed up as the sawtooth. I fixed it by adding a counter and only recording every second reading:
+ 
+```python
+i += 1
+if i % 2 == 0 and len(log) < MAX_LOG:
+```
+ 
+That gave me evenly spaced samples at about 27 ms and the sawtooth disappeared. It also halves the amount of data I have to move off the board, which is a bonus.
+ 
+Step 2 - the problem with turning position into speed:
+ 
+Getting speed from position sounds easy. Take two positions, see how far apart they are, divide by the time between them. That is one line of code. The problem is what it does to the small errors in each reading.
+ 
+Every position reading is off by a small amount, maybe half a centimetre. When two readings are taken very close together in time, the actual movement between them is also small. So the error stays the same size while the thing I am measuring gets smaller, and the error takes over. Then doing the same thing again to get acceleration makes it much worse, because now I am amplifying a number that is already noisy.
+ 
+Here is what that looked like with no smoothing at all:
+ 
+- Position: fine, a clear rising line
+- Speed: mostly noise, jumping around way more than the real signal
+- Acceleration: completely unusable, swinging between plus and minus 30
+Those acceleration numbers were physically impossible for what I was actually moving. The sensor was not broken. This happens because of the maths, not the hardware, and a better sensor would have had the same problem.
+ 
+Step 3 - smoothing:
+ 
+The fix is to clean up the position readings before working out the speed. I used a moving average. Each point gets replaced by the average of itself and the points on either side of it. With a window of 5, point number 10 becomes the average of points 8, 9, 10, 11 and 12. The window slides along so every point gets its own average.
+ 
+```python
+smoothing_window_size = 5
+smoothed_positions = []
+
+for i in range(len(positions)):
+    low_index = max(0, i - smoothing_window_size // 2)
+    high_index = min(len(positions), i + smoothing_window_size // 2 + 1)
+
+    smoothed_positions.append(
+        sum(positions[low_index:high_index])
+        / (high_index - low_index)
+    )
+
+```
+ 
+This works because the errors are random. Sometimes a reading is a bit high, sometimes a bit low. Averaging several of them together lets those cancel out. The real movement is the same in all of them, so it survives.
+ 
+One thing I want to be clear about is that a moving average does not delete a single bad reading. It spreads it out over the points around it, so the spike gets shorter and wider instead of disappearing. To actually get rid of single bad readings I would use a median filter, which takes the middle value instead of the average. That is the same reason I already use a median and not an average for the baseline during calibration.
+ 
+Step 4 - choosing the window size:
+ 
+The window size is a trade off and there is no single right answer. A small window keeps the curve sharp and reacting quickly, but it is still noisy. A large window gives a smooth curve, but it lags behind the real movement and flattens anything that happens fast. If my speed really does spike for a short moment and my window covers a longer stretch than that, the spike just disappears.
+ 
+I tried a few sizes and compared them. With only about 22 points of data, a window of 15 would be averaging most of the run into every single point, so the curve came out almost featureless. A window of 5 kept the shape while removing most of the noise.
+ 
+The way I decided was to check whether the smoothed curve still showed the features I could already see in the raw data. If smoothing removed something that was clearly real, the window was too big.
 
 
 
+**Results**
+
+Position: 
+The position curve is smooth enough that the raw and smoothed lines almost sit on top of each other. The speed builds up to a peak of about 0.39 m/s around 0.5 seconds and then drops off, which is a real motion profile rather than noise.
+Raw - 
+<img width="633" height="536" alt="Screenshot 2026-09-03 at 1 05 43 PM" src="https://github.com/user-attachments/assets/59452665-163c-4066-9429-207ef4a5df6e" />
+
+Smoothed - 
+<img width="633" height="536" alt="Screenshot 2026-09-03 at 1 06 12 PM" src="https://github.com/user-attachments/assets/e84e0d67-a5b8-4455-9d5c-3355231e4d6f" />
+
+Velocity: 
+The speed curve shows a clear shape: it builds from about 0.06 m/s up to a peak of 0.39 m/s around 0.5 seconds, then drops off. That is a real motion profile, not noise.
+<img width="633" height="536" alt="Screenshot 2026-09-03 at 1 08 32 PM" src="https://github.com/user-attachments/assets/30ec6e41-45da-4d82-8d05-a54bc7f98553" />
+
+Acceleration: 
+The acceleration curve is still noisy, swinging between about plus and minus 5. It is readable but not clean. This is the part that would improve most from smoothing the speed before working out acceleration, which is the next thing I would change.
+<img width="633" height="536" alt="Screenshot 2026-09-03 at 1 09 39 PM" src="https://github.com/user-attachments/assets/43d91789-f80f-4741-a15c-bb475fe71b95" />
 
 
+The two curves agree with each other, which is a good check. The speed peaks at around 0.5 seconds, and the acceleration crosses from positive to negative right around the same point. That is what should happen physically, so the processing is not producing nonsense.
+
+**What I would do differently**
+ 
+Smooth the speed as well. Right now I smooth the position and then work out speed and acceleration from it. Smoothing the speed before working out acceleration would give a cleaner acceleration curve.
+ 
+Cut the data where the sensor loses me. Near the end of my runs the same value kept repeating, which means the sensor had locked onto something behind me instead of me. That part of the data is not valid and should be removed before processing.
+ 
+Try a median filter instead of a moving average and compare the two properly, instead of assuming the moving average is the right choice.
+
+
+**Conclusion**
+ 
+I set out to build something that could time a 10 metre sprint well enough to tell me if I was actually getting faster. The stopwatch could not do that, because its error was almost as big as the improvement I was going for.
+ 
+The two gates do the job. When I tested them side by side, the spread was about 6 ms, compared to around 300 ms for a stopwatch. That is roughly 50 times better. A 0.4 second improvement is way bigger than that, so now I can tell a real change from a bad run.
+ 
+The profiler goes further. Instead of one number for the whole sprint, it gives me a speed curve for the first few metres, which is the part my coach cares about. A stopwatch cannot do that at all.
+ 
+The whole thing cost about $30, compared to roughly $200 for a system I could have just bought.
+ 
+**What I actually learned**
+ 
+Most of the hard parts were not where I thought they would be.
+ 
+The hardware was the easy half. Three sensors, three voltage dividers, a breadboard, and some wires. What actually took the time was everything after that.
+ 
+The hardest part by far was the signal processing, which is just a name for cleaning up messy data before you use it.Every reading is off by a small amount, and on its own that does not matter much. But when I tried to turn position into speed, those small errors got much bigger, and when I did it again to get acceleration they took over completely. My first acceleration graph was swinging between plus and minus 30, which is impossible for what I was actually moving. Nothing was broken. It just happens because of how the maths works.
+ 
+Fixing that meant learning about smoothing, and that there is no perfect setting. A small window leaves the graph noisy. A big window makes it smooth but flattens out things that are real. I had to try different sizes and compare them, and pick the one that cleaned things up without deleting anything that mattered. I also learned that a moving average does not remove a single bad reading, it just spreads it out, which is not what I assumed at first.
+ 
+The other thing I learned is that measuring your own device matters as much as building it. Before I ran the side by side test I had no idea if my timer was good to 5 ms or 500 ms. Without that number I could not honestly say it was better than a stopwatch. Building something is not the same as knowing what it does.
+ 
+**Version 3**
+ 
+The main limit right now is the ultrasonic sensor. Every reading has to wait for the sound to go out and come back, and that waiting is what causes most of my timing error. An infrared beam does not wait, so it would fire almost instantly and make the timing much more accurate. I would also go wireless so there are no cables across the field, but that brings back the problem of two boards having two clocks that do not agree.
 
